@@ -1,0 +1,295 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+
+  <title>Food Log</title>
+
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+  <script
+    src="https://code.jquery.com/jquery-2.2.4.min.js"
+    integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44="
+    crossorigin="anonymous"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+  <style>
+    body {
+      background: #fece0a;
+      background: -webkit-linear-gradient(to right, #fece0a, #846605);
+      background:    -moz-linear-gradient(to right, #fece0a, #846605);
+      background:         linear-gradient(to right, #fece0a, #846605);
+    }
+    body, .form-control, .btn, .errors { font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+
+    <div class="row">
+      <div class="col-xs-12 col-md-12">
+        <ul class="nav nav-tabs" role="tablist">
+          <li role="presentation" class="active"><a href="#entry" aria-controls="entry" role="tab" data-toggle="tab">Entry</a></li>
+          <li role="presentation"><a href="#listing" aria-controls="profile" role="tab" data-toggle="tab">Listing</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-xs-12 col-md-12">
+        <div style="padding: 0 0 8px 0;">
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" style="padding: 0 0 4px 0;">
+
+      <div role="tabpanel" class="tab-pane active" id="entry">
+        <div class="row">
+          <div class="col-xs-12 col-md-12">
+            <div class="form-group">
+               <label for="food">Food</label>
+               <input type="text" class="form-control" id="food" placeholder="Enter the food">
+             </div>
+           </div>
+        </div>
+
+        <div class="row">
+          <div class="col-xs-4 col-md-4">
+            <div class="form-group">
+               <label for="amount">Amount</label>
+               <input type="text" class="form-control" id="amount" placeholder="Enter the amount">
+             </div>
+           </div>
+           <div class="col-xs-4 col-md-4">
+             <div class="form-group">
+                <label for="date">Date</label>
+                <input type="text" class="form-control" id="date" placeholder="Enter the date">
+              </div>
+            </div>
+            <div class="col-xs-4 col-md-4">
+              <div class="form-group">
+                 <label for="time">Time</label>
+                 <input type="text" class="form-control" id="time" placeholder="Enter the time">
+               </div>
+             </div>
+        </div>
+
+        <div class="row">
+          <div class="col-xs-6 col-md-2">
+            <button type="button" class="btn btn-warning" id="reset">Reset</button>
+            <button type="button" class="btn btn-primary" id="save">Save</button>
+          </div>
+          <div class="col-xs-6 col-md-10">
+            <div class="alert alert-danger" role="alert" id="alert">
+              <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+              <span class="sr-only">Error</span>
+              <span class="errors" id="errors"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div role="tabpanel" class="tab-pane" id="listing">
+        <div class="row">
+          <div class="col-xs-12 col-md-12">
+            <table class="table table-condensed table-striped">
+              <thead>
+                <th>Food</th>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Time</th>
+              </thead>
+              <tbody id="listingBody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+  <script type="text/javascript">
+    //
+    // data respository
+    //
+    var logItems;
+    var saveLogItemListeners = [];
+    var getLogItemsListeners = [];
+    function addSaveLogItemListener(listener) {
+      saveLogItemListeners.push(listener);
+    }
+    function addGetLogItemsListener(listener) {
+      getLogItemsListeners.push(listener);
+    }
+    function saveLogItem(item) {
+      var req = $.ajax('/v1/logItem', {contentType: 'application/json', data: JSON.stringify(item), dataType: 'json', method: 'POST', processData: false})
+      // N.B. our repository gets updated via web socket
+      return req;
+    }
+    function getLogItems(maxCount) {
+      var req = $.ajax('/v1/logItems', {dataType: 'json', method: 'GET', query: {maxCount: maxCount}})
+      req.done(function (data) {
+        logItems = data;
+        getLogItemsListeners.forEach(function (listener) {
+          listener(data);
+        });
+      });
+      return req;
+    }
+    function startWebSocket(refreshData) {
+      var host = location.origin.replace(/^http/, 'ws')
+      var ws = new WebSocket(host);
+      ws.onopen = function (event) {
+        console.log("Websocket opened");
+      };
+      ws.onmessage = function (event) {
+        var data = JSON.parse(event.data);
+        logItems.push(data);
+        saveLogItemListeners.forEach(function (listener) {
+          listener(data);
+        });
+      };
+      ws.onclose = function (event) {
+        console.log("Websocket closed");
+        refreshData(function () {
+          startWebSocket(refreshData);
+        });
+      };
+    }
+
+    //
+    // entry tab behaviors
+    //
+    function reset() {
+      $('#food').val('');
+      $('#amount').val('1');
+      $('#date').val('Today');
+      $('#time').val('Noon');
+      $('#errors').text('');
+      $('#alert').hide();
+    }
+    function clearErrors() {
+      $('#alert').fadeOut(function () {
+        $('#errors').text('');
+      });
+    }
+    function setErrors(errors, isStatus) {
+      if (isStatus) {
+        $('#errors').text('Saved');
+        $('#alert')
+          .toggleClass('alert-danger', false)
+          .toggleClass('alert-success', true)
+          .show();
+        setTimeout(clearErrors, 2000);
+      } else {
+        $('#errors').text(errors);
+        $('#alert')
+          .toggleClass('alert-danger', true)
+          .toggleClass('alert-success', false)
+          .show();
+      }
+    }
+    function validate(food, amount, date, time) {
+      var errors = '';
+      if (!food) {
+        errors += 'Food must be specified ';
+      }
+      if (!amount) {
+        errors += 'Amount must be specified ';
+      }
+      if (!date) {
+        errors += 'Date must be specified ';
+      }
+      if (!time) {
+        errors += 'Time must be specified ';
+      }
+      return errors;
+    }
+    function save() {
+      var food = $('#food').val();
+      var amount = $('#amount').val();
+      var date = $('#date').val();
+      var time = $('#time').val();
+
+      var errors = validate(food, amount, date, time);
+      if (errors) {
+        setErrors(errors);
+        return;
+      }
+
+      var item = { food: food, amount: amount, date: date, time: time };
+      var req = saveLogItem(item)
+      req.done(function (data) {
+        reset();
+        setErrors('Saved', true);
+      })
+      req.fail(function (jqXHR, textStatus, errorThrown) {
+        alert('ajax error: ' + errorThrown);
+      });
+    }
+
+    //
+    // listing tab behaviors
+    //
+    function insertItem(listingBody, item) {
+      var row = $(document.createElement('tr'))
+        .append($(document.createElement('td'))
+          .text(item.food))
+        .append($(document.createElement('td'))
+          .text(item.amount))
+        .append($(document.createElement('td'))
+          .text(item.date))
+        .append($(document.createElement('td'))
+          .text(item.time));
+      listingBody.prepend(row);
+    }
+    function displayItems(items) {
+      var listingBody = $('#listingBody');
+      logItems.forEach(function (item) {
+        insertItem(listingBody, item);
+      });
+    }
+    function displayNewItem(item) {
+      var listingBody = $('#listingBody');
+      insertItem(listingBody, item);
+    }
+
+    //
+    // DOM ready
+    //
+    $(function () {
+      // initialize entry tab
+      $('#reset').on('click', reset);
+      $('#save').on('click', save);
+      reset();
+
+      // hook listing tab up to data repository
+      addSaveLogItemListener(displayNewItem);
+      addGetLogItemsListener(displayItems);
+
+      // initialize data repository
+      function refreshData(callback) {
+        var req = getLogItems();
+        req.done(function () {
+          // Note the race condition: we miss anything posted
+          // between our get and the establishment of our websocket.
+          // Fortunately, we are not sending a human to Mars so we ignore.
+          if (callback) {
+            callback();
+          }
+        });
+        req.fail(function (jqXHR, textStatus, errorThrown) {
+          alert('ajax error: ' + errorThrown);
+        });
+      }
+
+      refreshData(function () {
+        startWebSocket(refreshData);
+      });
+    });
+  </script>
+</body>
+</html>
