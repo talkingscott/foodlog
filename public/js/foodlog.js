@@ -132,12 +132,20 @@ function parseTime(aTime) {
         unused.push(token);
       }
     });
-    return 'Invalid token(s) for when: ' + unused;
+    return 'Invalid stuff entered for when: ' + unused;
   }
 
-  // If no day was specified, it is 'now' if a negative time was specified, otherwise 'today'
+  // Validate day and offset combination
   if (day === undefined) {
     day = (offset >= 0) ? 'today' : 'now';
+  } else if (day === 'now') {
+    if (offset > 0) {
+      return "Cannot specify a positive time with 'now'";
+    }
+  } else {
+    if (offset < 0) {
+      return "Cannot specify a negative time with '" + day + "'";
+    }
   }
 
   // Calculate and return the corresponding Javascript Date
