@@ -67,8 +67,7 @@ function startWebSocket(refreshData) {
 function reset() {
   $('#food').val('');
   $('#amount').val('1');
-  $('#date').val('Today');
-  $('#time').val('Now');
+  $('#when').val('Now');
   $('#errors').text('');
   $('#alert').hide();
 }
@@ -93,7 +92,77 @@ function setErrors(errors, isStatus) {
       .show();
   }
 }
-function validate(food, amount, date, time) {
+var days = ['now', 'today', 'yesterday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+function parseTime(aTime) {
+  var tokens = aTime.toLowerCase().split(/\s+/);
+  var tokensUsed = [];
+
+  // Find the day specified, if any
+  var day;
+  for (var i = 0; i < tokens.length; i++) {
+    var index = $.inArray(tokens[i], days);
+    if (index >= 0) {
+      day = days[index];
+      tokensUsed.push(day);
+      break;
+    }
+  }
+
+  // Find the time specified, if any
+  var offset = 0;
+  for (var i = 0; i < tokens.length; i++) {
+    var matches = tokens[i].match(/^(\-)*(\d{1,2})(:(\d\d))*$/);
+    if (matches != null) {
+      var sign = matches[1];
+      var hours = matches[2];
+      var minutes = matches[4];
+      offset = ((parseInt(hours) * 60) + (minutes ? parseInt(minutes): 0)) * 60 * 1000;
+      if (sign) {
+        offset = -offset;
+      }
+      tokensUsed.push(tokens[i]);
+      break;
+    }
+  }
+
+  if (tokens.length != tokensUsed.length) {
+    var unused = [];
+    tokens.forEach(function (token) {
+      if ($.inArray(token, tokensUsed) < 0) {
+        unused.push(token);
+      }
+    });
+    return 'Invalid token(s) for when: ' + unused;
+  }
+
+  // If no day was specified, it is 'now' if a negative time was specified, otherwise 'today'
+  if (day === undefined) {
+    day = (offset >= 0) ? 'today' : 'now';
+  }
+
+  // Calculate and return the corresponding Javascript Date
+  var millis;
+  var now = new Date();
+  if (day === 'now') {
+    millis = now.getTime();
+  } else if (day === 'today') {
+    millis = now.getTime(); // UTC
+    millis = millis - (now.getTimezoneOffset() * 60 * 1000);  // local
+    millis = millis - (millis % (24 * 60 * 60 * 1000)); // today local
+    millis = millis + (now.getTimezoneOffset() * 60 * 1000);  // today UTC
+  } else if (day === 'yesterday') {
+    millis = now.getTime();
+    millis = millis - (now.getTimezoneOffset() * 60 * 1000);
+    millis = millis - (millis % (24 * 60 * 60 * 1000));
+    millis = millis - (24 * 60 * 60 * 1000);
+    millis = millis + (now.getTimezoneOffset() * 60 * 1000);
+  } else {
+    return 'Do not support yet: ' + day;
+  }
+
+  return new Date(millis + offset);
+}
+function validate(food, amount, when) {
   var errors = '';
   if (!food) {
     errors += 'Food must be specified ';
@@ -101,27 +170,29 @@ function validate(food, amount, date, time) {
   if (!amount) {
     errors += 'Amount must be specified ';
   }
-  if (!date) {
-    errors += 'Date must be specified ';
-  }
-  if (!time) {
-    errors += 'Time must be specified ';
+  if (!when) {
+    errors += 'When must be specified ';
   }
   return errors;
 }
 function save() {
   var food = $('#food').val();
   var amount = $('#amount').val();
-  var date = $('#date').val();
-  var time = $('#time').val();
+  var when = $('#when').val();
 
-  var errors = validate(food, amount, date, time);
+  var errors = validate(food, amount, when);
   if (errors) {
     setErrors(errors);
     return;
   }
 
-  var item = { food: food, amount: amount, date: date, time: time };
+  var dt = parseTime(when);
+  if (typeof(dt) === 'string') {
+    setErrors(dt);
+    return;
+  }
+
+  var item = { food: food, amount: amount, when: dt };
   var req = saveLogItem(item)
   req.done(function (data) {
     reset();
@@ -142,9 +213,7 @@ function insertItem(listingBody, item) {
     .append($(document.createElement('td'))
       .text(item.amount))
     .append($(document.createElement('td'))
-      .text(item.date))
-    .append($(document.createElement('td'))
-      .text(item.time));
+      .text(item.when));
   listingBody.prepend(row);
 }
 function displayItems(items) {
